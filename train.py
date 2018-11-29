@@ -71,7 +71,7 @@ def train(args, log_dir, hparams):
 		GTA_state = 1
 		save_seq(state_file, [taco_state, GTA_state, wave_state], input_path)
 	else:
-		input_path = os.path.join('tacotron_' + args.output_dir, 'gta', 'map.txt')
+		input_path = os.path.join(args.base_dir, args.output_dir + '_tacotron', 'gta', 'map.txt')
 
 	if input_path == '' or input_path is None:
 		raise RuntimeError('input_path has an unpleasant value -> {}'.format(input_path))

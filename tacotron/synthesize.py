@@ -85,7 +85,7 @@ def run_synthesis(args, checkpoint_path, output_dir, hparams):
 		os.makedirs(synth_dir, exist_ok=True)
 
 
-	metadata_filename = os.path.join(args.input_dir, 'train.txt')
+	metadata_filename = os.path.join(args.base_dir, args.input_dir, 'train.txt')
 	log(hparams_debug_string())
 	synth = Synthesizer()
 	synth.load(checkpoint_path, hparams, gta=GTA)
@@ -99,8 +99,8 @@ def run_synthesis(args, checkpoint_path, output_dir, hparams):
 	metadata = [metadata[i: i+hparams.tacotron_synthesis_batch_size] for i in range(0, len(metadata), hparams.tacotron_synthesis_batch_size)]
 
 	log('Starting Synthesis')
-	mel_dir = os.path.join(args.input_dir, 'mels')
-	wav_dir = os.path.join(args.input_dir, 'audio')
+	mel_dir = os.path.join(args.base_dir, args.input_dir, 'mels')
+	wav_dir = os.path.join(args.base_dir, args.input_dir, 'audio')
 	with open(os.path.join(synth_dir, 'map.txt'), 'w') as file:
 		for i, meta in enumerate(tqdm(metadata)):
 			texts = [m[5] for m in meta]
@@ -115,7 +115,7 @@ def run_synthesis(args, checkpoint_path, output_dir, hparams):
 	return os.path.join(synth_dir, 'map.txt')
 
 def tacotron_synthesize(args, hparams, checkpoint, sentences=None):
-	output_dir = 'tacotron_' + args.output_dir
+	output_dir = os.path.join(args.base_dir, args.output_dir) + '_tacotron'
 
 	try:
 		checkpoint_path = tf.train.get_checkpoint_state(checkpoint).model_checkpoint_path

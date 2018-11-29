@@ -155,7 +155,6 @@ def train(log_dir, args, hparams, input_path):
 	os.makedirs(tensorboard_dir, exist_ok=True)
 
 	checkpoint_path = os.path.join(save_dir, 'wavenet_model.ckpt')
-	input_path = os.path.join(args.base_dir, input_path)
 
 	log('Checkpoint_path: {}'.format(checkpoint_path))
 	log('Loading training data from: {}'.format(input_path))

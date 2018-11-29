@@ -33,9 +33,6 @@ class Feeder:
 		else:
 			self._spec_pad = 0.
 
-		#Base directory of the project (to map files from different locations)
-		self._base_dir = base_dir
-
 		#Load metadata
 		self._data_dir = os.path.dirname(metadata_filename)
 		with open(metadata_filename, 'r') as f:
@@ -170,10 +167,10 @@ class Feeder:
 			mel_file = meta[1]
 		audio_file = meta[0]
 
-		input_data = np.load(os.path.join(self._base_dir, audio_file))
+		input_data = np.load(audio_file)
 
 		if self.local_condition:
-			local_condition_features = np.load(os.path.join(self._base_dir, mel_file))
+			local_condition_features = np.load(mel_file)
 		else:
 			local_condition_features = None
 
@@ -242,10 +239,10 @@ class Feeder:
 			mel_file = meta[1]
 		audio_file = meta[0]
 
-		input_data = np.load(os.path.join(self._base_dir, audio_file))
+		input_data = np.load(audio_file)
 
 		if self.local_condition:
-			local_condition_features = np.load(os.path.join(self._base_dir, mel_file))
+			local_condition_features = np.load(mel_file)
 		else:
 			local_condition_features = None
 
