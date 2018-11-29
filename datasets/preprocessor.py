@@ -1,4 +1,4 @@
-import os
+import glob, os
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
@@ -6,6 +6,22 @@ import numpy as np
 from datasets import audio
 from wavenet_vocoder.util import is_mulaw, is_mulaw_quantize, mulaw, mulaw_quantize
 
+# for windows
+def replace(str):
+    return str.replace('\\','/')
+
+# punctuate
+def segment(zhText,pinyinText):
+	arr = pinyinText.split(" ")
+	result = " "
+	index = 0
+	for j in zhText:
+		if(j != ' ' and index < len(arr)):
+			result += arr[index] + " "
+			index += 1
+		else:
+			result += " "
+	return result
 
 def build_from_path(hparams, input_dirs, mel_dir, linear_dir, wav_dir, n_jobs=12, tqdm=lambda x: x):
 	"""
@@ -30,12 +46,29 @@ def build_from_path(hparams, input_dirs, mel_dir, linear_dir, wav_dir, n_jobs=12
 	futures = []
 	index = 1
 	for input_dir in input_dirs:
-		with open(os.path.join(input_dir, 'metadata.csv'), encoding='utf-8') as f:
-			for line in f:
-				parts = line.strip().split('|')
-				basename = parts[0]
-				wav_path = os.path.join(input_dir, 'wavs', '{}.wav'.format(basename))
-				text = parts[2]
+		trn_files = glob.glob(os.path.join(input_dir, "data", 'A*', '*.trn'))
+		for trn in trn_files:
+			with open(trn,encoding='utf-8') as f:
+				basename = trn[:-4]
+				text = None
+				if basename.endswith('.wav'):
+					# THCHS30
+					zhText = f.readline()
+					pinyinText = f.readline()
+					text = segment(zhText, pinyinText)
+					wav_file = basename
+				else:
+					wav_file = basename + '.wav'
+				wav_path = wav_file
+				basename = basename.split('/')[-1]
+				text = text if text != None else f.readline().strip()
+
+				mel_dir = replace(mel_dir)
+				linear_dir = replace(linear_dir)
+				wav_dir = replace(wav_dir)
+				wav_path = replace(wav_path)
+				basename = replace(basename)
+
 				futures.append(executor.submit(partial(_process_utterance, mel_dir, linear_dir, wav_dir, basename, wav_path, text, hparams)))
 				index += 1
 
@@ -139,13 +172,23 @@ def _process_utterance(mel_dir, linear_dir, wav_dir, index, wav_path, text, hpar
 	assert len(out) % audio.get_hop_size(hparams) == 0
 	time_steps = len(out)
 
-	# Write the spectrogram and audio to disk
+	# Pre filename
 	audio_filename = 'audio-{}.npy'.format(index)
 	mel_filename = 'mel-{}.npy'.format(index)
-	linear_filename = 'linear-{}.npy'.format(index)
-	np.save(os.path.join(wav_dir, audio_filename), out.astype(out_dtype), allow_pickle=False)
-	np.save(os.path.join(mel_dir, mel_filename), mel_spectrogram.T, allow_pickle=False)
-	np.save(os.path.join(linear_dir, linear_filename), linear_spectrogram.T, allow_pickle=False)
+	linear_filename ='linear-{}.npy'.format(index)
+	audio_filename_full = replace(os.path.join(wav_dir, audio_filename))
+	mel_filename_full = replace(os.path.join(mel_dir, mel_filename))
+	linear_filename_full = replace(os.path.join(linear_dir, linear_filename))
+
+	# Make dir
+	os.makedirs(os.path.dirname(audio_filename_full), exist_ok=True)
+	os.makedirs(os.path.dirname(mel_filename_full), exist_ok=True)
+	os.makedirs(os.path.dirname(linear_filename_full), exist_ok=True)
+
+	# Write the spectrogram and audio to disk
+	np.save(audio_filename_full, out.astype(out_dtype), allow_pickle=False)
+	np.save(mel_filename_full, mel_spectrogram.T, allow_pickle=False)
+	np.save(linear_filename_full, linear_spectrogram.T, allow_pickle=False)
 
 	# Return a tuple describing this training example
 	return (audio_filename, mel_filename, linear_filename, time_steps, mel_frames, text)

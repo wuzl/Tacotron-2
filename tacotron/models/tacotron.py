@@ -311,11 +311,7 @@ class Tacotron():
 
 						if hp.predict_linear:
 							#Compute linear loss
-							#From https://github.com/keithito/tacotron/blob/tacotron2-work-in-progress/models/tacotron.py
-							#Prioritize loss for frequencies under 2000 Hz.
-							l1 = tf.abs(self.tower_linear_targets[i] - self.tower_linear_outputs[i])
-							n_priority_freq = int(2000 / (hp.sample_rate * 0.5) * hp.num_freq)
-							linear_loss = 0.5 * tf.reduce_mean(l1) + 0.5 * tf.reduce_mean(l1[:,:,0:n_priority_freq])
+							linear_loss = tf.losses.mean_squared_error(self.tower_linear_targets[i], self.tower_linear_outputs[i])
 						else:
 							linear_loss = 0.
 

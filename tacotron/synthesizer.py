@@ -1,5 +1,6 @@
 import os
 import wave
+import io
 from datetime import datetime
 
 import numpy as np
@@ -30,10 +31,12 @@ class Synthesizer:
 				self.model.initialize(inputs, input_lengths, split_infos=split_infos)
 
 			self.mel_outputs = self.model.tower_mel_outputs
-			self.linear_outputs = self.model.tower_linear_outputs if (hparams.predict_linear and not gta) else None
 			self.alignments = self.model.tower_alignments
 			self.stop_token_prediction = self.model.tower_stop_token_prediction
 			self.targets = targets
+			if hparams.predict_linear and not gta:
+				self.linear_outputs = self.model.tower_linear_outputs
+				self.linear_wav_outputs = audio.inv_spectrogram_tensorflow(self.model.tower_linear_outputs[0], hparams)
 
 		self.gta = gta
 		self._hparams = hparams
@@ -129,8 +132,9 @@ class Synthesizer:
 			assert len(mels) == len(texts)
 
 		else:
-			linears, mels, alignments, stop_tokens = self.session.run([self.linear_outputs, self.mel_outputs, self.alignments, self.stop_token_prediction], feed_dict=feed_dict)
+			linear_wavs, linears, mels, alignments, stop_tokens = self.session.run([self.linear_wav_outputs, self.linear_outputs, self.mel_outputs, self.alignments, self.stop_token_prediction], feed_dict=feed_dict)
 			#Linearize outputs (1D arrays)
+			linear_wavs = [linear_wav for gpu_linear_wav in linear_wavs for linear_wav in gpu_linear_wav]
 			linears = [linear for gpu_linear in linears for linear in gpu_linear]
 			mels = [mel for gpu_mels in mels for mel in gpu_mels]
 			alignments = [align for gpu_aligns in alignments for align in gpu_aligns]
@@ -191,29 +195,44 @@ class Synthesizer:
 
 			if log_dir is not None:
 				#save wav (mel -> wav)
-				wav = audio.inv_mel_spectrogram(mel.T, hparams)
-				audio.save_wav(wav, os.path.join(log_dir, 'wavs/wav-{}-mel.wav'.format(basenames[i])), sr=hparams.sample_rate)
+				# wav = audio.inv_mel_spectrogram(mel.T, hparams)
+				# audio.save_wav(wav, os.path.join(log_dir, 'wavs/wav-{}-mel.wav'.format(basenames[i])), sr=hparams.sample_rate)
 
 				#save alignments
-				plot.plot_alignment(alignments[i], os.path.join(log_dir, 'plots/alignment-{}.png'.format(basenames[i])),
-					title='{}'.format(texts[i]), split_title=True, max_len=target_lengths[i])
+				# plot.plot_alignment(alignments[i], os.path.join(log_dir, 'plots/alignment-{}.png'.format(basenames[i])),
+				# 	title='{}'.format(texts[i]), split_title=True, max_len=target_lengths[i])
 
 				#save mel spectrogram plot
-				plot.plot_spectrogram(mel, os.path.join(log_dir, 'plots/mel-{}.png'.format(basenames[i])),
-					title='{}'.format(texts[i]), split_title=True)
+				# plot.plot_spectrogram(mel, os.path.join(log_dir, 'plots/mel-{}.png'.format(basenames[i])),
+				# 	title='{}'.format(texts[i]), split_title=True)
 
 				if hparams.predict_linear:
 					#save wav (linear -> wav)
-					wav = audio.inv_linear_spectrogram(linears[i].T, hparams)
+					wav = audio.inv_preemphasis(linear_wavs, hparams.preemphasis)
 					audio.save_wav(wav, os.path.join(log_dir, 'wavs/wav-{}-linear.wav'.format(basenames[i])), sr=hparams.sample_rate)
 
 					#save linear spectrogram plot
-					plot.plot_spectrogram(linears[i], os.path.join(log_dir, 'plots/linear-{}.png'.format(basenames[i])),
-						title='{}'.format(texts[i]), split_title=True, auto_aspect=True)
+					# plot.plot_spectrogram(linears[i], os.path.join(log_dir, 'plots/linear-{}.png'.format(basenames[i])),
+					# 	title='{}'.format(texts[i]), split_title=True, auto_aspect=True)
 
 
 
 		return saved_mels_paths, speaker_ids
+
+	def eval(self, text):
+		hparams = self._hparams
+		cleaner_names = [x.strip() for x in hparams.cleaners.split(',')]
+		seqs = [np.asarray(text_to_sequence(text, cleaner_names))]
+		input_lengths = [len(seq) for seq in seqs]
+		feed_dict = {
+			self.model.inputs: seqs,
+			self.model.input_lengths: np.asarray(input_lengths, dtype=np.int32),
+		}
+		linear_wavs = self.session.run(self.linear_wav_outputs, feed_dict=feed_dict)
+		wav = audio.inv_preemphasis(linear_wavs, hparams.preemphasis)
+		out = io.BytesIO()
+		audio.save_wav(wav, out ,sr=hparams.sample_rate)
+		return out.getvalue()
 
 	def _round_up(self, x, multiple):
 		remainder = x % multiple
